@@ -5,45 +5,60 @@ import java.util.LinkedList;
 import java.util.Scanner;
 
 class Parse {
-    public HashMap<String, Pattern> tokenTypes; // Since we don't have identifiers, we're just going to represent tokens using unique string IDs.
+    public enum Token {
+        // For some reason using Strings as the constructors messes up syntax highlighting.
+        CURLYBOI_L(0), CURLYBOI_R(1),
+        ROUNDBOI_L(2), ROUNDBOI_R(3),
+        PRINTLN(4), SEMICOLON(5),
+        IF(6), ELSE(7), WHILE(8),
+        TRUE(9), FALSE(10), NOT(11);
 
-    private void addTokenType(String tokenID, String regex) {
-        this.tokenTypes.put(tokenID, Pattern.compile(regex));
+        private final String[] regexStrings = {
+            "^(\\{)", "^(\\})", "^(\\()", "^(\\))",
+            "^(System.out.println)",
+            "^(;)", "^(if)", "^(else)", "^(while)",
+            "^(true)", "^(false)", "^(!)"
+        };
+
+        private final Pattern regex;
+
+        private Token(int regexID) {
+            this.regex = Pattern.compile(this.regexStrings[regexID]);
+        }
     }
 
-    public Parse() {
-        this.tokenTypes = new HashMap<String, Pattern>();
+    public LinkedList<Token> tokens;
 
-        // Define the alphabet. Note we only match the first instance of the symbol in the string.
-        this.addTokenType("{", "^(\\{)"); // {
-        this.addTokenType("}", "^(\\})"); // }
-        this.addTokenType("System.out.println", "^(System.out.println)"); // System.out.println
-        this.addTokenType("(", "^(\\()"); // (
-        this.addTokenType(")", "^(\\))"); // )
-        this.addTokenType(";", "^(;)"); // ;
-        this.addTokenType("if", "^(if)"); // if
-        this.addTokenType("else", "^(else)"); // else
-        this.addTokenType("while", "^(while)"); // while
-        this.addTokenType("true", "^(true)"); // true
-        this.addTokenType("false", "^(false)"); // false
-        this.addTokenType("!", "^(!)"); // !
+    // Did the parse succeed?
+    private Boolean parseSucceed = true;
+    public Boolean parseSuccessful() {
+        return this.parseSucceed;
     }
 
-    public LinkedList<String> tokenize(String program) throws Exception {
+    // Driver.
+    public Parse(String program) {
+        try {
+            this.tokens = this.tokenize(program);
+        } catch (Exception e) {
+            this.parseSucceed = false;
+        }
+    }
+
+    // Tokenizing logic.
+    public LinkedList<Token> tokenize(String program) throws Exception {
         program = program.replaceAll("\\s",""); // Remove all spacing.
         
-        LinkedList<String> tokens = new LinkedList<String>();
+        LinkedList<Token> tokens = new LinkedList<Token>();
 
         while (!program.equals("")) {
             Boolean tokenFound = false;
             // Iterate through each member of the alphabet until a match is found.
-            for(Entry<String, Pattern> tokenType : tokenTypes.entrySet()) {
-                Matcher matcher = tokenType.getValue().matcher(program);
+            for (Token tokenType : Token.values()) {
+                Matcher matcher = tokenType.regex.matcher(program);
                 if (matcher.find()) {
                     tokenFound = true;
-                    tokens.add(tokenType.getKey()); // Add this symbol to the tokens list.
-                    program = matcher.replaceFirst(""); // Cut out the matched symbol.
-                    break;
+                    tokens.add(tokenType); // Add this symbol to the tokens list.
+                    program = matcher.replaceFirst(""); // Cut out the matcher symbol.
                 }
             }
             // If no match was found, there must have been an unexpected token. Throw an error.
@@ -55,23 +70,40 @@ class Parse {
         return tokens;
     }
 
-    public static void main(String [] args) {
-        Parse parser = new Parse();
+    // Parsing logic.
+    Iterator tokensQueue = tokens.iterator();
+    private Token curToken;
+    private Boolean eat(Token t) {
+        if (this.curToken == t) {
+            // Advance to next token.
+            this.curToken = tokensQueue.next();
+            return true;
+        } else {
+            return false;
+        }
+    }
+/*
 
+S ::= { L }
+| System.out.println ( E ) ;
+| if ( E ) S else S
+| while ( E ) S
+L ::= S L | ϵ    (nullable)
+E ::= true | false | ! E
+
+*/
+    private void S() {
+        
+    }
+
+    public static void main(String [] args) {
         String program = "";
         Scanner input = new Scanner(System.in);
         while(input.hasNextLine()) {
             program += input.nextLine();
         }
-        System.out.println(program);
 
-        try {
-            LinkedList<String> tokens = parser.tokenize(program);
-            for (String i : tokens) {
-                System.out.println(i);
-            }
-        } catch (Exception e) {
-            System.out.println("Parse error.");
-        }
+        Parse parser = new Parse(program);
+        System.out.println(parser.parseSuccessful());
     }
 }
