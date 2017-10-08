@@ -3,6 +3,7 @@ import java.util.HashMap;
 import java.util.Map.Entry;
 import java.util.LinkedList;
 import java.util.Scanner;
+import java.util.Iterator;
 
 class Parse {
     public enum Token {
@@ -11,13 +12,14 @@ class Parse {
         ROUNDBOI_L(2), ROUNDBOI_R(3),
         PRINTLN(4), SEMICOLON(5),
         IF(6), ELSE(7), WHILE(8),
-        TRUE(9), FALSE(10), NOT(11);
+        TRUE(9), FALSE(10), NOT(11),
+        EMPTY(12);
 
         private final String[] regexStrings = {
             "^(\\{)", "^(\\})", "^(\\()", "^(\\))",
             "^(System.out.println)",
             "^(;)", "^(if)", "^(else)", "^(while)",
-            "^(true)", "^(false)", "^(!)"
+            "^(true)", "^(false)", "^(!)", "^$"
         };
 
         private final Pattern regex;
@@ -30,15 +32,13 @@ class Parse {
     public LinkedList<Token> tokens;
 
     // Did the parse succeed?
-    private Boolean parseSucceed = true;
-    public Boolean parseSuccessful() {
-        return this.parseSucceed;
-    }
+    public Boolean parseSucceed = true;
+    public String errorMsg = "";
 
-    // Driver.
     public Parse(String program) {
         try {
             this.tokens = this.tokenize(program);
+            this.parseSucceed = this.parseTokens();
         } catch (Exception e) {
             this.parseSucceed = false;
         }
@@ -54,6 +54,8 @@ class Parse {
             Boolean tokenFound = false;
             // Iterate through each member of the alphabet until a match is found.
             for (Token tokenType : Token.values()) {
+                if (tokenType == Token.EMPTY) continue;
+
                 Matcher matcher = tokenType.regex.matcher(program);
                 if (matcher.find()) {
                     tokenFound = true;
@@ -71,29 +73,97 @@ class Parse {
     }
 
     // Parsing logic.
-    Iterator tokensQueue = tokens.iterator();
-    private Token curToken;
-    private Boolean eat(Token t) {
-        if (this.curToken == t) {
-            // Advance to next token.
-            this.curToken = tokensQueue.next();
-            return true;
+    Iterator<Token> tokensQueue;
+    private int tokenNum = 0;
+    private Token curToken; // null if no more tokens.
+
+    // Call to begin parsing tokens. We're not building an AST here.
+    private Boolean parseTokens() {
+        tokensQueue = this.tokens.iterator();
+        if (tokensQueue.hasNext()) {
+            // Determine what the first non-terminal of the program is and begin parsing.
+            this.curToken = tokensQueue.next(); this.tokenNum++;        
+            try {
+                if (this.curToken == Token.CURLYBOI_L || this.curToken == Token.PRINTLN 
+                        || this.curToken == Token.IF || this.curToken == Token.WHILE) {
+                    this.statement();
+                } else if (this.curToken == Token.TRUE || this.curToken == Token.FALSE || this.curToken == Token.NOT) {
+                    this.expression();
+                }
+            } catch (Exception e) {
+                this.errorMsg = e.toString();
+                return false;
+            }
+            
+            // If all tokens have been consumed, the parsing succeeded.
+            return (this.curToken == Token.EMPTY);
         } else {
-            return false;
+            // Empty program. Vacuously valid.
+            return true;
         }
     }
-/*
 
-S ::= { L }
-| System.out.println ( E ) ;
-| if ( E ) S else S
-| while ( E ) S
-L ::= S L | ϵ    (nullable)
-E ::= true | false | ! E
-
-*/
-    private void S() {
-        
+    // Returns false if no more tokens in token list.
+    private void eat(Token token) throws Exception {
+        if (this.curToken == token) {
+            if (tokensQueue.hasNext()) {            
+                this.curToken = tokensQueue.next(); this.tokenNum++; // Advance to next token.
+            } else {
+                this.curToken = Token.EMPTY;
+            }
+        } else {
+            throw new Exception("Missing token \"" + token + "\".");
+        }
+    }
+    private void statement() throws Exception {
+        if (this.curToken == Token.CURLYBOI_L) {
+            eat(Token.CURLYBOI_L);
+            list();
+            eat(Token.CURLYBOI_R);
+        } else if (this.curToken == Token.PRINTLN) {
+            eat(Token.PRINTLN);
+            eat(Token.ROUNDBOI_L);
+            expression();
+            eat(Token.ROUNDBOI_R);
+            eat(Token.SEMICOLON);
+        } else if (this.curToken == Token.IF) {
+            eat(Token.IF);
+            eat(Token.ROUNDBOI_L);
+            expression();
+            eat(Token.ROUNDBOI_R);
+            statement();
+            eat(Token.ELSE);
+            statement();
+        } else if (this.curToken == Token.WHILE) {
+            eat(Token.WHILE);
+            eat(Token.ROUNDBOI_L);
+            expression();
+            eat(Token.ROUNDBOI_R);
+            statement();
+        } else {
+            throw new Exception("Invalid statement. Invalid token: " + this.curToken + " tokenNum: " + this.tokenNum);
+        }
+    }
+    private void list() throws Exception {
+        if (this.curToken == Token.CURLYBOI_R) {
+            // End of list.
+            return;
+        } else {
+            statement();
+            list();
+        }
+    }
+    private void expression() throws Exception {
+        if (this.curToken == Token.TRUE) {
+            eat(Token.TRUE);
+        } else if (this.curToken == Token.FALSE) {
+            eat(Token.FALSE);
+        } else if (this.curToken == Token.NOT) {
+            eat(Token.NOT);
+            expression();
+        } else {
+            throw new Exception ("Invalid expression. Invalid token: " + this.curToken + " tokenNum: " + this.tokenNum);
+        }
     }
 
     public static void main(String [] args) {
@@ -104,6 +174,7 @@ E ::= true | false | ! E
         }
 
         Parse parser = new Parse(program);
-        System.out.println(parser.parseSuccessful());
+
+        System.out.println(parser.parseSucceed? "Program parsed successfully" : "Parse error");
     }
 }
